@@ -1,7 +1,8 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'collection_screen.dart';
 import 'identify_screen.dart';
-import '../services/demo_data_service.dart';
+import 'settings_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -13,7 +14,6 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _index = 0;
   int _collectionKey = 0;
-  bool _demoLoading = false;
 
   void _onPlantSaved() {
     setState(() {
@@ -22,39 +22,16 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  Future<void> _loadDemo() async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Load demo plants?'),
-        content: const Text(
-          'Adds 5 sample plants with various locations and dates to your collection.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Load'),
-          ),
-        ],
-      ),
+  Future<void> _openSettings() async {
+    final demoLoaded = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(builder: (_) => const SettingsScreen()),
     );
-    if (confirm != true || !mounted) return;
-
-    setState(() => _demoLoading = true);
-    try {
-      await DemoDataService().populate();
-    } finally {
-      if (mounted) {
-        setState(() {
-          _demoLoading = false;
-          _index = 0;
-          _collectionKey++;
-        });
-      }
+    if (demoLoaded == true) {
+      setState(() {
+        _index = 0;
+        _collectionKey++;
+      });
     }
   }
 
@@ -79,26 +56,11 @@ class _HomeScreenState extends State<HomeScreen> {
         backgroundColor: Colors.green[700],
         elevation: 0,
         actions: [
-          if (_demoLoading)
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16),
-              child: Center(
-                child: SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Colors.white,
-                  ),
-                ),
-              ),
-            )
-          else
-            IconButton(
-              icon: const Icon(Icons.science_outlined, color: Colors.white),
-              tooltip: 'Load demo plants',
-              onPressed: _loadDemo,
-            ),
+          IconButton(
+            icon: const Icon(Icons.settings_outlined, color: Colors.white),
+            tooltip: 'settings'.tr(),
+            onPressed: _openSettings,
+          ),
         ],
       ),
       body: IndexedStack(
@@ -115,16 +77,16 @@ class _HomeScreenState extends State<HomeScreen> {
         selectedIndex: _index,
         onDestinationSelected: (i) => setState(() => _index = i),
         indicatorColor: Colors.green[100],
-        destinations: const [
+        destinations: [
           NavigationDestination(
-            icon: Icon(Icons.collections_bookmark_outlined),
-            selectedIcon: Icon(Icons.collections_bookmark),
-            label: 'Collection',
+            icon: const Icon(Icons.collections_bookmark_outlined),
+            selectedIcon: const Icon(Icons.collections_bookmark),
+            label: 'collection_tab'.tr(),
           ),
           NavigationDestination(
-            icon: Icon(Icons.yard_outlined),
-            selectedIcon: Icon(Icons.yard),
-            label: 'Identify',
+            icon: const Icon(Icons.yard_outlined),
+            selectedIcon: const Icon(Icons.yard),
+            label: 'identify_tab'.tr(),
           ),
         ],
       ),

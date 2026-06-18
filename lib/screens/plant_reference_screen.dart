@@ -1,6 +1,7 @@
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
-import '../widgets/plant_card.dart' show tagColor;
+import '../widgets/plant_card.dart' show tagColor, localizedTag;
 
 class PlantReferenceScreen extends StatefulWidget {
   final List<String> imageUrls;
@@ -204,31 +205,31 @@ class _PlantReferenceScreenState extends State<PlantReferenceScreen> {
                 ),
 
                 const SizedBox(height: 16),
-                const _SectionHeader(label: 'Taxonomy'),
+                _SectionHeader(label: 'taxonomy'.tr()),
                 const SizedBox(height: 8),
                 _InfoRow(
                   icon: Icons.category_outlined,
-                  label: 'Family',
+                  label: 'family'.tr(),
                   value: widget.family,
                 ),
                 const SizedBox(height: 6),
                 _InfoRow(
                   icon: Icons.account_tree_outlined,
-                  label: 'Genus',
+                  label: 'genus'.tr(),
                   value: _genus,
                 ),
                 if (_speciesEpithet.isNotEmpty) ...[
                   const SizedBox(height: 6),
                   _InfoRow(
                     icon: Icons.spa_outlined,
-                    label: 'Species',
+                    label: 'species'.tr(),
                     value: _speciesEpithet,
                     italic: true,
                   ),
                 ],
                 if (widget.tags.isNotEmpty) ...[
                   const SizedBox(height: 16),
-                  const _SectionHeader(label: 'Characteristics'),
+                  _SectionHeader(label: 'characteristics'.tr()),
                   const SizedBox(height: 10),
                   Wrap(
                     spacing: 6,
@@ -322,7 +323,7 @@ class _ReferenceTagChip extends StatelessWidget {
         border: Border.all(color: color.withValues(alpha: 0.35)),
       ),
       child: Text(
-        tag,
+        localizedTag(tag),
         style: TextStyle(
           fontSize: 12,
           color: color,

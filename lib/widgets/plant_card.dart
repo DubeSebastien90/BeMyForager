@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import '../models/plant.dart';
 import '../screens/plant_reference_screen.dart';
@@ -158,14 +159,11 @@ class PlantCard extends StatelessWidget {
           if (plant.tags.isNotEmpty)
             Padding(
               padding: const EdgeInsets.fromLTRB(10, 0, 8, 8),
-              child: Row(
+              child: Wrap(
+                spacing: 4,
+                runSpacing: 3,
                 children: [
-                  ...plant.tags.take(3).map(
-                        (tag) => Padding(
-                          padding: const EdgeInsets.only(right: 4),
-                          child: _TagChip(tag: tag),
-                        ),
-                      ),
+                  ...plant.tags.take(3).map((tag) => _TagChip(tag: tag)),
                   if (plant.tags.length > 3)
                     _TagChip(tag: '+${plant.tags.length - 3}', isOverflow: true),
                 ],
@@ -194,6 +192,9 @@ Color tagColor(String tag) {
   };
 }
 
+/// Returns the localized display name for a tag key (e.g. 'Edible' → 'Comestible').
+String localizedTag(String tag) => 'tag_${tag.toLowerCase()}'.tr();
+
 class _TagChip extends StatelessWidget {
   final String tag;
   final bool isOverflow;
@@ -203,6 +204,7 @@ class _TagChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = isOverflow ? Colors.grey : tagColor(tag);
+    final label = isOverflow ? tag : localizedTag(tag);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
       decoration: BoxDecoration(
@@ -210,7 +212,7 @@ class _TagChip extends StatelessWidget {
         borderRadius: BorderRadius.circular(4),
       ),
       child: Text(
-        tag,
+        label,
         style: TextStyle(
           fontSize: 9,
           color: color,

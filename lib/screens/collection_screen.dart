@@ -1,9 +1,10 @@
 import 'dart:io';
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import '../models/plant.dart';
 import '../models/sighting.dart';
 import '../services/storage_service.dart';
-import '../widgets/plant_card.dart' show PlantCard, tagColor;
+import '../widgets/plant_card.dart' show PlantCard, tagColor, localizedTag;
 import 'location_group_screen.dart';
 import 'plant_detail_screen.dart';
 
@@ -58,17 +59,18 @@ class _CollectionScreenState extends State<CollectionScreen> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Remove plant?'),
-        content: Text('Remove "${plant.commonName}" from your collection?'),
+        title: Text('remove_plant_title'.tr()),
+        content: Text(
+            'remove_plant_content'.tr(namedArgs: {'name': plant.commonName})),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
+            child: Text('cancel'.tr()),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Remove'),
+            child: Text('remove'.tr()),
           ),
         ],
       ),
@@ -189,7 +191,7 @@ class _CollectionScreenState extends State<CollectionScreen> {
             controller: _searchController,
             textInputAction: TextInputAction.search,
             decoration: InputDecoration(
-              hintText: 'Search by name, family, location…',
+              hintText: 'search_hint'.tr(),
               hintStyle: TextStyle(color: Colors.grey[400], fontSize: 14),
               prefixIcon: Icon(Icons.search, size: 20, color: Colors.grey[400]),
               suffixIcon: _query.isNotEmpty
@@ -237,7 +239,7 @@ class _CollectionScreenState extends State<CollectionScreen> {
             Icon(Icons.search_off, size: 52, color: Colors.grey[300]),
             const SizedBox(height: 12),
             Text(
-              'No results for "$_query"',
+              'no_results'.tr(namedArgs: {'query': _query}),
               style: TextStyle(color: Colors.grey[400], fontSize: 15),
             ),
           ],
@@ -282,9 +284,9 @@ class _CollectionScreenState extends State<CollectionScreen> {
                     Icon(Icons.label_outline,
                         color: Colors.green[600], size: 18),
                     const SizedBox(width: 6),
-                    const Text(
-                      'Category',
-                      style: TextStyle(
+                    Text(
+                      'category'.tr(),
+                      style: const TextStyle(
                           fontSize: 15, fontWeight: FontWeight.w700),
                     ),
                     if (_selectedTag != null) ...[
@@ -292,7 +294,7 @@ class _CollectionScreenState extends State<CollectionScreen> {
                       GestureDetector(
                         onTap: () => setState(() => _selectedTag = null),
                         child: Text(
-                          'Clear',
+                          'clear'.tr(),
                           style: TextStyle(
                             fontSize: 12,
                             color: Colors.green[600],
@@ -342,9 +344,9 @@ class _CollectionScreenState extends State<CollectionScreen> {
                     Icon(Icons.location_on,
                         color: Colors.green[600], size: 18),
                     const SizedBox(width: 6),
-                    const Text(
-                      'Locations',
-                      style: TextStyle(
+                    Text(
+                      'locations'.tr(),
+                      style: const TextStyle(
                           fontSize: 15, fontWeight: FontWeight.w700),
                     ),
                   ],
@@ -390,9 +392,9 @@ class _CollectionScreenState extends State<CollectionScreen> {
                 children: [
                   Icon(Icons.eco, color: Colors.green[600], size: 18),
                   const SizedBox(width: 6),
-                  const Text(
-                    'My Plants',
-                    style: TextStyle(
+                  Text(
+                    'my_plants'.tr(),
+                    style: const TextStyle(
                         fontSize: 15, fontWeight: FontWeight.w700),
                   ),
                   const SizedBox(width: 6),
@@ -435,7 +437,9 @@ class _CollectionScreenState extends State<CollectionScreen> {
           Icon(Icons.label_off_outlined, size: 52, color: Colors.grey[300]),
           const SizedBox(height: 12),
           Text(
-            'No $_selectedTag plants yet',
+            'no_tag_plants'.tr(namedArgs: {
+              'tag': localizedTag(_selectedTag!),
+            }),
             style: TextStyle(color: Colors.grey[400], fontSize: 15),
           ),
         ],
@@ -451,7 +455,7 @@ class _CollectionScreenState extends State<CollectionScreen> {
           Icon(Icons.eco_outlined, size: 80, color: Colors.green[200]),
           const SizedBox(height: 16),
           Text(
-            'No plants yet',
+            'no_plants_yet'.tr(),
             style: TextStyle(
               fontSize: 22,
               fontWeight: FontWeight.w600,
@@ -460,7 +464,7 @@ class _CollectionScreenState extends State<CollectionScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            'Go to Identify to snap your first plant!',
+            'no_plants_hint'.tr(),
             style: TextStyle(color: Colors.grey[400]),
           ),
         ],
@@ -542,7 +546,7 @@ class _CategoryCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
-                    tag,
+                    localizedTag(tag),
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 9,
@@ -574,7 +578,7 @@ class _CategoryCard extends StatelessWidget {
                 left: 8,
                 right: 8,
                 child: Text(
-                  '$plantCount plant${plantCount > 1 ? "s" : ""}',
+                  'plant_count'.plural(plantCount),
                   style: const TextStyle(
                     color: Colors.white70,
                     fontSize: 10,
@@ -664,7 +668,7 @@ class _LocationGroupCard extends StatelessWidget {
                       ],
                     ),
                     Text(
-                      '$plantCount plant${plantCount > 1 ? "s" : ""}',
+                      'plant_count'.plural(plantCount),
                       style: const TextStyle(
                           color: Colors.white70, fontSize: 10),
                     ),

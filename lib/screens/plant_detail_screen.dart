@@ -1,10 +1,11 @@
 import 'dart:io';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import '../models/plant.dart';
 import '../models/sighting.dart';
 import '../services/storage_service.dart';
-import '../widgets/plant_card.dart' show tagColor;
+import '../widgets/plant_card.dart' show tagColor, localizedTag;
 import 'plant_reference_screen.dart';
 
 class PlantDetailScreen extends StatefulWidget {
@@ -27,15 +28,11 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> {
   }
 
   String _formatDateTime(DateTime date) {
-    const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-    ];
+    final month = 'month_${date.month}'.tr();
     final h = date.hour.toString().padLeft(2, '0');
     final m = date.minute.toString().padLeft(2, '0');
-    return '${months[date.month - 1]} ${date.day}, ${date.year} · $h:$m';
+    return '$month ${date.day}, ${date.year} · $h:$m';
   }
-
 
   Future<void> _persist(List<Sighting> sightings) async {
     final updated = _plant.copyWith(sightings: sightings);
@@ -72,20 +69,20 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Delete plant?'),
+        title: Text('delete_plant_title'.tr()),
         content: Text(
-          'This is the only photo. Removing it will delete '
-          '"${_plant.commonName}" from your collection.',
+          'delete_last_photo_content'
+              .tr(namedArgs: {'name': _plant.commonName}),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
+            child: Text('cancel'.tr()),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Delete plant'),
+            child: Text('delete_plant'.tr()),
           ),
         ],
       ),
@@ -159,14 +156,14 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> {
 
             // ── actions ────────────────────────────────────────────────────
             if (isMain)
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                 child: Row(
                   children: [
-                    Icon(Icons.star, color: Colors.amber, size: 18),
-                    SizedBox(width: 8),
-                    Text('This is the main photo',
-                        style: TextStyle(fontWeight: FontWeight.w600)),
+                    const Icon(Icons.star, color: Colors.amber, size: 18),
+                    const SizedBox(width: 8),
+                    Text('main_photo_label'.tr(),
+                        style: const TextStyle(fontWeight: FontWeight.w600)),
                   ],
                 ),
               ),
@@ -174,7 +171,7 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> {
               ListTile(
                 leading:
                     const Icon(Icons.star_outline, color: Colors.amber),
-                title: const Text('Set as main photo'),
+                title: Text('set_as_main'.tr()),
                 onTap: () {
                   Navigator.pop(ctx);
                   _setAsMain(index);
@@ -184,8 +181,8 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> {
               leading: const Icon(Icons.delete_outline, color: Colors.red),
               title: Text(
                 _plant.sightings.length == 1
-                    ? 'Remove photo & delete plant'
-                    : 'Remove photo',
+                    ? 'remove_and_delete'.tr()
+                    : 'remove_photo'.tr(),
                 style: const TextStyle(color: Colors.red),
               ),
               onTap: () {
@@ -234,7 +231,6 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> {
                       ),
                     ),
                   ),
-                  // gradient fade so the card feels like it slides over
                   const Positioned(
                     bottom: 0,
                     left: 0,
@@ -375,7 +371,8 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> {
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
               child: Text(
-                'Photos (${_plant.sightings.length})',
+                'photos_count'.tr(
+                    namedArgs: {'count': _plant.sightings.length.toString()}),
                 style: const TextStyle(
                     fontSize: 15, fontWeight: FontWeight.w600),
               ),
@@ -420,15 +417,15 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> {
                                   color: Colors.amber[700],
                                   borderRadius: BorderRadius.circular(10),
                                 ),
-                                child: const Row(
+                                child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    Icon(Icons.star,
+                                    const Icon(Icons.star,
                                         size: 11, color: Colors.white),
-                                    SizedBox(width: 3),
+                                    const SizedBox(width: 3),
                                     Text(
-                                      'Main',
-                                      style: TextStyle(
+                                      'main_badge'.tr(),
+                                      style: const TextStyle(
                                         color: Colors.white,
                                         fontSize: 11,
                                         fontWeight: FontWeight.bold,
@@ -495,7 +492,7 @@ class _DetailTagChip extends StatelessWidget {
         border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Text(
-        tag,
+        localizedTag(tag),
         style: TextStyle(
           fontSize: 11,
           color: color,
