@@ -9,6 +9,7 @@ class Sighting {
   final String? subLocality;
   /// Specific POI / park / forest name from the OS geocoder.
   final String? placeName;
+  final double? confidence;
 
   const Sighting({
     required this.imagePath,
@@ -20,6 +21,7 @@ class Sighting {
     this.locality,
     this.subLocality,
     this.placeName,
+    this.confidence,
   });
 
   String? get locationLabel {
@@ -68,6 +70,7 @@ class Sighting {
     locality: locality,
     subLocality: subLocality,
     placeName: placeName,
+    confidence: confidence,
   );
 
   Map<String, dynamic> toJson() => {
@@ -80,6 +83,7 @@ class Sighting {
     if (locality != null) 'locality': locality,
     if (subLocality != null) 'subLocality': subLocality,
     if (placeName != null) 'placeName': placeName,
+    if (confidence != null) 'confidence': confidence,
   };
 
   factory Sighting.fromJson(Map<String, dynamic> json) => Sighting(
@@ -92,5 +96,6 @@ class Sighting {
     locality: json['locality'] as String?,
     subLocality: json['subLocality'] as String?,
     placeName: json['placeName'] as String?,
+    confidence: (json['confidence'] as num?)?.toDouble(),
   );
 }

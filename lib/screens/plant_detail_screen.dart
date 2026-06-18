@@ -447,7 +447,7 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> {
                                 borderRadius: BorderRadius.circular(6),
                               ),
                               child: Text(
-                                '${(_plant.confidence * 100).toStringAsFixed(0)}%',
+                                '${((_plant.sightings[i].confidence ?? _plant.confidence) * 100).toStringAsFixed(0)}%',
                                 style: const TextStyle(
                                   color: Colors.white,
                                   fontSize: 10,

@@ -142,6 +142,7 @@ class _IdentifyScreenState extends State<IdentifyScreen> {
     locality: _location?.locality,
     subLocality: _location?.subLocality,
     placeName: _location?.placeName,
+    confidence: _result?.confidence,
   );
 
   Future<void> _saveNew() async {
