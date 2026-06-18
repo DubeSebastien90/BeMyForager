@@ -26,14 +26,17 @@ class PlantNetService {
       'https://my-api.plantnet.org/v2/identify/all';
 
   /// Returns all candidates ordered by confidence (best first).
-  Future<List<PlantIdentificationResult>> identify(File imageFile) async {
+  Future<List<PlantIdentificationResult>> identify(
+    File imageFile, {
+    String lang = 'en',
+  }) async {
     final apiKey = dotenv.env['PLANTNET_API_KEY'] ?? '';
     if (apiKey.isEmpty || apiKey == 'your_api_key_here') {
       throw Exception('PlantNet API key is not configured in .env');
     }
 
     final uri = Uri.parse(
-        '$_baseUrl?api-key=$apiKey&lang=en&include-related-images=true');
+        '$_baseUrl?api-key=$apiKey&lang=$lang&include-related-images=true');
     final request = http.MultipartRequest('POST', uri);
     request.files.add(
       await http.MultipartFile.fromPath('images', imageFile.path),

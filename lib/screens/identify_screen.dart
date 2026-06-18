@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'plant_reference_screen.dart';
@@ -10,7 +11,7 @@ import '../services/location_service.dart';
 import '../services/plant_net_service.dart';
 import '../services/storage_service.dart';
 import '../services/trefle_service.dart';
-import '../widgets/plant_card.dart' show tagColor;
+import '../widgets/plant_card.dart' show tagColor, localizedTag;
 
 class IdentifyScreen extends StatefulWidget {
   final VoidCallback onPlantSaved;
@@ -66,7 +67,10 @@ class _IdentifyScreenState extends State<IdentifyScreen> {
     try {
       // location runs in parallel with PlantNet; Trefle starts after we have the scientific name
       final locationFuture = _locationService.getCurrentLocation();
-      final results = await _service.identify(_image!);
+      final results = await _service.identify(
+        _image!,
+        lang: context.locale.languageCode,
+      );
       final best = results.first;
       final topScore = best.confidence;
 
@@ -221,7 +225,7 @@ class _IdentifyScreenState extends State<IdentifyScreen> {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('$name added to your collection!'),
+          content: Text('added_to_collection'.tr(namedArgs: {'name': name})),
           backgroundColor: Colors.green[700],
           behavior: SnackBarBehavior.floating,
         ),
@@ -242,7 +246,7 @@ class _IdentifyScreenState extends State<IdentifyScreen> {
             Icon(Icons.yard_outlined, size: 90, color: Colors.green[200]),
             const SizedBox(height: 20),
             Text(
-              'Identify a Plant',
+              'identify_title'.tr(),
               style: Theme.of(context)
                   .textTheme
                   .headlineSmall
@@ -250,7 +254,7 @@ class _IdentifyScreenState extends State<IdentifyScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Take a photo or pick one from your gallery\nto identify what plant it is.',
+              'identify_subtitle'.tr(),
               style: TextStyle(color: Colors.grey[500], height: 1.5),
               textAlign: TextAlign.center,
             ),
@@ -272,7 +276,7 @@ class _IdentifyScreenState extends State<IdentifyScreen> {
             const SizedBox(height: 8),
             const CircularProgressIndicator(),
             const SizedBox(height: 12),
-            Text('Identifying…', style: TextStyle(color: Colors.grey[600])),
+            Text('identifying'.tr(), style: TextStyle(color: Colors.grey[600])),
             const SizedBox(height: 24),
           ],
 
@@ -304,7 +308,8 @@ class _IdentifyScreenState extends State<IdentifyScreen> {
                 color: Colors.orange,
                 icon: Icons.info_outline,
                 child: Text(
-                  '${_result!.commonName} is already in your collection.',
+                  'already_in_collection'.tr(
+                      namedArgs: {'name': _result!.commonName}),
                   style: const TextStyle(color: Colors.orange),
                 ),
               ),
@@ -320,7 +325,7 @@ class _IdentifyScreenState extends State<IdentifyScreen> {
                 child: FilledButton.icon(
                   onPressed: _saveNew,
                   icon: const Icon(Icons.add),
-                  label: const Text('Add to Collection'),
+                  label: Text('add_to_collection'.tr()),
                   style: FilledButton.styleFrom(
                     backgroundColor: Colors.green[700],
                     padding: const EdgeInsets.symmetric(vertical: 14),
@@ -339,7 +344,7 @@ class _IdentifyScreenState extends State<IdentifyScreen> {
               Expanded(
                 child: _ActionButton(
                   icon: Icons.camera_alt_outlined,
-                  label: 'Camera',
+                  label: 'camera'.tr(),
                   onTap:
                       _identifying ? null : () => _pick(ImageSource.camera),
                 ),
@@ -348,7 +353,7 @@ class _IdentifyScreenState extends State<IdentifyScreen> {
               Expanded(
                 child: _ActionButton(
                   icon: Icons.photo_library_outlined,
-                  label: 'Gallery',
+                  label: 'gallery'.tr(),
                   onTap:
                       _identifying ? null : () => _pick(ImageSource.gallery),
                 ),
@@ -367,7 +372,7 @@ class _IdentifyScreenState extends State<IdentifyScreen> {
                 _error = null;
                 _tags = [];
               }),
-              child: const Text('Start over'),
+              child: Text('start_over'.tr()),
             ),
           ],
         ],
@@ -393,7 +398,7 @@ class _AlternativesSection extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.only(left: 2, bottom: 8),
           child: Text(
-            'Could also be…',
+            'could_also_be'.tr(),
             style: TextStyle(
               fontWeight: FontWeight.w600,
               color: Colors.grey[600],
@@ -531,7 +536,7 @@ class _DuplicateActions extends StatelessWidget {
           child: FilledButton.icon(
             onPressed: onUseAsMain,
             icon: const Icon(Icons.star_outline),
-            label: const Text('Use as main image'),
+            label: Text('use_as_main'.tr()),
             style: FilledButton.styleFrom(
               backgroundColor: Colors.green[700],
               padding: const EdgeInsets.symmetric(vertical: 13),
@@ -546,7 +551,7 @@ class _DuplicateActions extends StatelessWidget {
           child: OutlinedButton.icon(
             onPressed: onAddToGallery,
             icon: const Icon(Icons.add_photo_alternate_outlined),
-            label: const Text('Add to gallery'),
+            label: Text('add_to_gallery'.tr()),
             style: OutlinedButton.styleFrom(
               padding: const EdgeInsets.symmetric(vertical: 13),
               shape: RoundedRectangleBorder(
@@ -562,7 +567,7 @@ class _DuplicateActions extends StatelessWidget {
           child: OutlinedButton.icon(
             onPressed: onDrop,
             icon: const Icon(Icons.close),
-            label: const Text('Drop photo'),
+            label: Text('drop_photo'.tr()),
             style: OutlinedButton.styleFrom(
               padding: const EdgeInsets.symmetric(vertical: 13),
               shape: RoundedRectangleBorder(
@@ -652,14 +657,14 @@ class _ResultCard extends StatelessWidget {
                           color: Colors.black54,
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        child: const Row(
+                        child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Text('Tap to expand',
-                                style: TextStyle(
+                            Text('tap_to_expand'.tr(),
+                                style: const TextStyle(
                                     color: Colors.white, fontSize: 10)),
-                            SizedBox(width: 4),
-                            Icon(Icons.open_in_full,
+                            const SizedBox(width: 4),
+                            const Icon(Icons.open_in_full,
                                 color: Colors.white, size: 11),
                           ],
                         ),
@@ -679,9 +684,10 @@ class _ResultCard extends StatelessWidget {
                   children: [
                     const Icon(Icons.eco, color: Colors.green),
                     const SizedBox(width: 8),
-                    const Text(
-                      'Plant identified!',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                    Text(
+                      'plant_identified'.tr(),
+                      style: const TextStyle(
+                          fontWeight: FontWeight.bold, fontSize: 15),
                     ),
                     const Spacer(),
                     Container(
@@ -703,14 +709,14 @@ class _ResultCard extends StatelessWidget {
                   ],
                 ),
                 const Divider(height: 20),
-                _Row(label: 'Common name', value: result.commonName),
+                _Row(label: 'common_name'.tr(), value: result.commonName),
                 const SizedBox(height: 8),
                 _Row(
-                    label: 'Scientific name',
+                    label: 'scientific_name'.tr(),
                     value: result.scientificName,
                     italic: true),
                 const SizedBox(height: 8),
-                _Row(label: 'Family', value: result.family),
+                _Row(label: 'family'.tr(), value: result.family),
                 if (tags.isNotEmpty) ...[
                   const SizedBox(height: 12),
                   Wrap(
@@ -829,7 +835,7 @@ class _IdentifyTagChip extends StatelessWidget {
         border: Border.all(color: color.withValues(alpha: 0.35)),
       ),
       child: Text(
-        tag,
+        localizedTag(tag),
         style: TextStyle(
           fontSize: 11,
           color: color,
