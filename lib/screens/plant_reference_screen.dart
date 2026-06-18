@@ -1,11 +1,13 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import '../widgets/plant_card.dart' show tagColor;
 
 class PlantReferenceScreen extends StatefulWidget {
   final List<String> imageUrls;
   final String commonName;
   final String scientificName;
   final String family;
+  final List<String> tags;
 
   const PlantReferenceScreen({
     super.key,
@@ -13,6 +15,7 @@ class PlantReferenceScreen extends StatefulWidget {
     required this.commonName,
     required this.scientificName,
     required this.family,
+    this.tags = const [],
   });
 
   @override
@@ -223,6 +226,18 @@ class _PlantReferenceScreenState extends State<PlantReferenceScreen> {
                     italic: true,
                   ),
                 ],
+                if (widget.tags.isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  const _SectionHeader(label: 'Characteristics'),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: widget.tags
+                        .map((t) => _ReferenceTagChip(tag: t))
+                        .toList(),
+                  ),
+                ],
               ],
             ),
           ),
@@ -288,6 +303,32 @@ class _SectionHeader extends StatelessWidget {
         const SizedBox(width: 8),
         Expanded(child: Divider(height: 1, color: Colors.grey[200])),
       ],
+    );
+  }
+}
+
+class _ReferenceTagChip extends StatelessWidget {
+  final String tag;
+  const _ReferenceTagChip({required this.tag});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = tagColor(tag);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
+      ),
+      child: Text(
+        tag,
+        style: TextStyle(
+          fontSize: 12,
+          color: color,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
     );
   }
 }

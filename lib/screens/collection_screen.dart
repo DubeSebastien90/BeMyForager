@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/plant.dart';
 import '../models/sighting.dart';
 import '../services/storage_service.dart';
-import '../widgets/plant_card.dart';
+import '../widgets/plant_card.dart' show PlantCard, tagColor;
 import 'location_group_screen.dart';
 import 'plant_detail_screen.dart';
 
@@ -21,6 +21,7 @@ class _CollectionScreenState extends State<CollectionScreen> {
   List<Plant> _plants = [];
   bool _loading = true;
   String _query = '';
+  String? _selectedTag;
 
   @override
   void initState() {
@@ -81,13 +82,37 @@ class _CollectionScreenState extends State<CollectionScreen> {
     setState(() => _plants = updated.reversed.toList());
   }
 
+  // ── tag filter ────────────────────────────────────────────────────────────
+
+  static const _tagOrder = [
+    'Edible', 'Medicinal', 'Toxic',
+    'Tree', 'Shrub', 'Herb', 'Grass', 'Flower', 'Vine', 'Fern', 'Mushroom',
+  ];
+
+  /// All unique tags across every plant, in canonical order.
+  List<String> get _allTags {
+    final present = _plants.expand((p) => p.tags).toSet();
+    return _tagOrder.where(present.contains).toList();
+  }
+
+  /// Plants filtered by the active tag (ignored during search).
+  List<Plant> get _tagFilteredPlants => _selectedTag == null
+      ? _plants
+      : _plants.where((p) => p.tags.contains(_selectedTag)).toList();
+
+  /// Representative image for a tag — first plant with that tag.
+  String _representativeTagImage(String tag) {
+    for (final plant in _plants) {
+      if (plant.tags.contains(tag)) return plant.mainImagePath;
+    }
+    return '';
+  }
+
   // ── location groups ───────────────────────────────────────────────────────
 
-  /// Map of locationGroupKey → list of plants with at least one sighting there.
-  /// Sorted alphabetically. Returns null when no plant has location data.
   Map<String, List<Plant>>? get _locationGroups {
     final map = <String, List<Plant>>{};
-    for (final plant in _plants) {
+    for (final plant in _tagFilteredPlants) {
       final keys = plant.sightings
           .map((s) => s.locationGroupKey)
           .where((k) => k != 'Unknown location')
@@ -103,7 +128,6 @@ class _CollectionScreenState extends State<CollectionScreen> {
     );
   }
 
-  /// First sighting image from [locationKey] across all plants in that group.
   String _representativeImage(String locationKey, List<Plant> plants) {
     for (final plant in plants) {
       for (final s in plant.sightings) {
@@ -115,7 +139,6 @@ class _CollectionScreenState extends State<CollectionScreen> {
 
   // ── search ────────────────────────────────────────────────────────────────
 
-  /// Returns filtered plants + the matching sighting image (or null = main photo).
   List<({Plant plant, String? overrideImage})> get _searchResults {
     final q = _query.toLowerCase();
     final result = <({Plant plant, String? overrideImage})>[];
@@ -239,22 +262,85 @@ class _CollectionScreenState extends State<CollectionScreen> {
   // ── default view ──────────────────────────────────────────────────────────
 
   Widget _buildDefault() {
+    final plants = _tagFilteredPlants;
     if (_plants.isEmpty) return _emptyState();
 
+    final tags = _allTags;
     final groups = _locationGroups;
 
     return RefreshIndicator(
       onRefresh: _load,
       child: CustomScrollView(
         slivers: [
-          // ── location groups strip ────────────────────────────────────────
-          if (groups != null) ...[
+          // ── category strip ───────────────────────────────────────────────
+          if (tags.isNotEmpty) ...[
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
                 child: Row(
                   children: [
-                    Icon(Icons.location_on, color: Colors.green[600], size: 18),
+                    Icon(Icons.label_outline,
+                        color: Colors.green[600], size: 18),
+                    const SizedBox(width: 6),
+                    const Text(
+                      'Category',
+                      style: TextStyle(
+                          fontSize: 15, fontWeight: FontWeight.w700),
+                    ),
+                    if (_selectedTag != null) ...[
+                      const SizedBox(width: 8),
+                      GestureDetector(
+                        onTap: () => setState(() => _selectedTag = null),
+                        child: Text(
+                          'Clear',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.green[600],
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+            SliverToBoxAdapter(
+              child: SizedBox(
+                height: 118,
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+                  itemCount: tags.length,
+                  itemBuilder: (ctx, i) {
+                    final tag = tags[i];
+                    final count = _plants
+                        .where((p) => p.tags.contains(tag))
+                        .length;
+                    return _CategoryCard(
+                      tag: tag,
+                      plantCount: count,
+                      imagePath: _representativeTagImage(tag),
+                      selected: _selectedTag == tag,
+                      onTap: () => setState(() =>
+                          _selectedTag = _selectedTag == tag ? null : tag),
+                    );
+                  },
+                ),
+              ),
+            ),
+            const SliverToBoxAdapter(child: SizedBox(height: 4)),
+          ],
+
+          // ── location groups strip ────────────────────────────────────────
+          if (groups != null) ...[
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
+                child: Row(
+                  children: [
+                    Icon(Icons.location_on,
+                        color: Colors.green[600], size: 18),
                     const SizedBox(width: 6),
                     const Text(
                       'Locations',
@@ -274,17 +360,17 @@ class _CollectionScreenState extends State<CollectionScreen> {
                   itemCount: groups.length,
                   itemBuilder: (ctx, i) {
                     final key = groups.keys.elementAt(i);
-                    final plants = groups[key]!;
+                    final groupPlants = groups[key]!;
                     return _LocationGroupCard(
                       locationKey: key,
-                      plantCount: plants.length,
-                      imagePath: _representativeImage(key, plants),
+                      plantCount: groupPlants.length,
+                      imagePath: _representativeImage(key, groupPlants),
                       onTap: () => Navigator.push(
                         context,
                         MaterialPageRoute(
                           builder: (_) => LocationGroupScreen(
                             locationKey: key,
-                            plants: plants,
+                            plants: groupPlants,
                           ),
                         ),
                       ).then((_) => _load()),
@@ -311,29 +397,46 @@ class _CollectionScreenState extends State<CollectionScreen> {
                   ),
                   const SizedBox(width: 6),
                   Text(
-                    '(${_plants.length})',
-                    style:
-                        TextStyle(fontSize: 12, color: Colors.grey[400]),
+                    '(${plants.length})',
+                    style: TextStyle(fontSize: 12, color: Colors.grey[400]),
                   ),
                 ],
               ),
             ),
           ),
 
-          // ── plants grid ─────────────────────────────────────────────────
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-            sliver: SliverGrid(
-              gridDelegate: _gridDelegate,
-              delegate: SliverChildBuilderDelegate(
-                (ctx, i) => GestureDetector(
-                  onTap: () => _openDetail(_plants[i]),
-                  onLongPress: () => _confirmDelete(_plants[i]),
-                  child: PlantCard(plant: _plants[i]),
+          // ── plants grid ──────────────────────────────────────────────────
+          plants.isEmpty
+              ? SliverFillRemaining(child: _noTagResults())
+              : SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                  sliver: SliverGrid(
+                    gridDelegate: _gridDelegate,
+                    delegate: SliverChildBuilderDelegate(
+                      (ctx, i) => GestureDetector(
+                        onTap: () => _openDetail(plants[i]),
+                        onLongPress: () => _confirmDelete(plants[i]),
+                        child: PlantCard(plant: plants[i]),
+                      ),
+                      childCount: plants.length,
+                    ),
+                  ),
                 ),
-                childCount: _plants.length,
-              ),
-            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _noTagResults() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.label_off_outlined, size: 52, color: Colors.grey[300]),
+          const SizedBox(height: 12),
+          Text(
+            'No $_selectedTag plants yet',
+            style: TextStyle(color: Colors.grey[400], fontSize: 15),
           ),
         ],
       ),
@@ -361,6 +464,126 @@ class _CollectionScreenState extends State<CollectionScreen> {
             style: TextStyle(color: Colors.grey[400]),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ── Category card ─────────────────────────────────────────────────────────────
+
+class _CategoryCard extends StatelessWidget {
+  final String tag;
+  final int plantCount;
+  final String imagePath;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _CategoryCard({
+    required this.tag,
+    required this.plantCount,
+    required this.imagePath,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = tagColor(tag);
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 120,
+        margin: const EdgeInsets.only(right: 10),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          border: selected
+              ? Border.all(color: color, width: 2.5)
+              : null,
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(selected ? 14 : 16),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              // plant image background
+              imagePath.isNotEmpty
+                  ? Image.file(
+                      File(imagePath),
+                      fit: BoxFit.cover,
+                      errorBuilder: (ctx, err, st) => ColoredBox(
+                        color: color.withValues(alpha: 0.15),
+                      ),
+                    )
+                  : ColoredBox(color: color.withValues(alpha: 0.15)),
+
+              // gradient overlay
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.transparent,
+                      Colors.black.withValues(alpha: 0.65),
+                    ],
+                  ),
+                ),
+              ),
+
+              // colored top-left accent strip
+              Positioned(
+                top: 8,
+                left: 8,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.85),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    tag,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 9,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ),
+
+              // selected checkmark
+              if (selected)
+                Positioned(
+                  top: 8,
+                  right: 8,
+                  child: Container(
+                    padding: const EdgeInsets.all(2),
+                    decoration: BoxDecoration(
+                      color: color,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.check,
+                        color: Colors.white, size: 10),
+                  ),
+                ),
+
+              // bottom label
+              Positioned(
+                bottom: 8,
+                left: 8,
+                right: 8,
+                child: Text(
+                  '$plantCount plant${plantCount > 1 ? "s" : ""}',
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 10,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -404,7 +627,6 @@ class _LocationGroupCard extends StatelessWidget {
                   ),
                 ),
               ),
-              // gradient overlay
               const DecoratedBox(
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
@@ -414,7 +636,6 @@ class _LocationGroupCard extends StatelessWidget {
                   ),
                 ),
               ),
-              // label
               Positioned(
                 bottom: 8,
                 left: 10,

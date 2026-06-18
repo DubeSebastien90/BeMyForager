@@ -74,7 +74,7 @@ class PlantCard extends StatelessWidget {
 
           // info row: text on the left, reference thumbnail on the right
           Padding(
-            padding: const EdgeInsets.fromLTRB(10, 8, 8, 10),
+            padding: const EdgeInsets.fromLTRB(10, 8, 8, 4),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
@@ -126,6 +126,7 @@ class PlantCard extends StatelessWidget {
                           commonName: plant.commonName,
                           scientificName: plant.scientificName,
                           family: plant.family,
+                          tags: plant.tags,
                         ),
                       ),
                     ),
@@ -152,7 +153,69 @@ class PlantCard extends StatelessWidget {
               ],
             ),
           ),
+
+          // tags row
+          if (plant.tags.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(10, 0, 8, 8),
+              child: Row(
+                children: [
+                  ...plant.tags.take(3).map(
+                        (tag) => Padding(
+                          padding: const EdgeInsets.only(right: 4),
+                          child: _TagChip(tag: tag),
+                        ),
+                      ),
+                  if (plant.tags.length > 3)
+                    _TagChip(tag: '+${plant.tags.length - 3}', isOverflow: true),
+                ],
+              ),
+            ),
         ],
+      ),
+    );
+  }
+}
+
+Color tagColor(String tag) {
+  return switch (tag) {
+    'Edible' => Colors.green,
+    'Medicinal' => Colors.blue,
+    'Toxic' => Colors.red,
+    'Tree' => const Color(0xFF5D4037),
+    'Shrub' => Colors.teal,
+    'Herb' => Colors.lightGreen,
+    'Grass' => const Color(0xFF9E9D24),
+    'Flower' => Colors.pink,
+    'Vine' => Colors.indigo,
+    'Fern' => Colors.cyan,
+    'Mushroom' => Colors.orange,
+    _ => Colors.grey,
+  };
+}
+
+class _TagChip extends StatelessWidget {
+  final String tag;
+  final bool isOverflow;
+
+  const _TagChip({required this.tag, this.isOverflow = false});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = isOverflow ? Colors.grey : tagColor(tag);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(
+        tag,
+        style: TextStyle(
+          fontSize: 9,
+          color: color,
+          fontWeight: FontWeight.w700,
+        ),
       ),
     );
   }

@@ -10,6 +10,7 @@ class Plant {
   final double confidence;
   final DateTime createdAt;
   final List<String> referenceImageUrls;
+  final List<String> tags;
 
   const Plant({
     required this.id,
@@ -20,6 +21,7 @@ class Plant {
     required this.confidence,
     required this.createdAt,
     this.referenceImageUrls = const [],
+    this.tags = const [],
   });
 
   // ── computed ──────────────────────────────────────────────────────────────
@@ -44,7 +46,7 @@ class Plant {
 
   // ── copy ──────────────────────────────────────────────────────────────────
 
-  Plant copyWith({List<Sighting>? sightings}) => Plant(
+  Plant copyWith({List<Sighting>? sightings, List<String>? tags}) => Plant(
     id: id,
     sightings: sightings ?? this.sightings,
     scientificName: scientificName,
@@ -53,6 +55,7 @@ class Plant {
     confidence: confidence,
     createdAt: createdAt,
     referenceImageUrls: referenceImageUrls,
+    tags: tags ?? this.tags,
   );
 
   // ── serialisation ─────────────────────────────────────────────────────────
@@ -66,13 +69,13 @@ class Plant {
     'confidence': confidence,
     'createdAt': createdAt.toIso8601String(),
     'referenceImageUrls': referenceImageUrls,
+    'tags': tags,
   };
 
   factory Plant.fromJson(Map<String, dynamic> json) {
     List<Sighting> sightings;
 
     if (json.containsKey('sightings')) {
-      // current format
       sightings = (json['sightings'] as List<dynamic>)
           .map((e) => Sighting.fromJson(e as Map<String, dynamic>))
           .toList();
@@ -118,6 +121,7 @@ class Plant {
       confidence: (json['confidence'] as num).toDouble(),
       createdAt: DateTime.parse(json['createdAt'] as String),
       referenceImageUrls: refUrls,
+      tags: (json['tags'] as List<dynamic>?)?.cast<String>() ?? const [],
     );
   }
 

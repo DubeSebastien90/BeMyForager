@@ -9,6 +9,8 @@ import '../models/sighting.dart';
 import '../services/location_service.dart';
 import '../services/plant_net_service.dart';
 import '../services/storage_service.dart';
+import '../services/trefle_service.dart';
+import '../widgets/plant_card.dart' show tagColor;
 
 class IdentifyScreen extends StatefulWidget {
   final VoidCallback onPlantSaved;
@@ -24,6 +26,7 @@ class _IdentifyScreenState extends State<IdentifyScreen> {
   final _service = PlantNetService();
   final _storage = StorageService();
   final _locationService = LocationService();
+  final _trefleService = TrefleService();
   static const _uuid = Uuid();
 
   File? _image;
@@ -33,6 +36,7 @@ class _IdentifyScreenState extends State<IdentifyScreen> {
   bool _identifying = false;
   String? _error;
   PlantLocation? _location;
+  List<String> _tags = [];
 
   Future<void> _pick(ImageSource source) async {
     final xFile = await _picker.pickImage(
@@ -48,6 +52,7 @@ class _IdentifyScreenState extends State<IdentifyScreen> {
       _existingPlant = null;
       _error = null;
       _location = null;
+      _tags = [];
     });
     await _identify();
   }
@@ -59,22 +64,28 @@ class _IdentifyScreenState extends State<IdentifyScreen> {
       _error = null;
     });
     try {
-      // run location fetch in parallel with PlantNet identification
+      // location runs in parallel with PlantNet; Trefle starts after we have the scientific name
       final locationFuture = _locationService.getCurrentLocation();
       final results = await _service.identify(_image!);
-      _location = await locationFuture;
-      final all = await _storage.loadPlants();
       final best = results.first;
       final topScore = best.confidence;
 
-      // Show alternatives that are at least 25% as confident as the top result
-      // and above 5% absolute — avoids noise at the bottom of the ranking.
+      // Filter alternatives first so we only fire Trefle for species we'll show.
       final alts = results
           .skip(1)
           .where((r) =>
               r.confidence >= topScore * 0.25 && r.confidence >= 0.05)
           .take(3)
           .toList();
+
+      // Fire Trefle for best + shown alternatives in parallel with location.
+      final trefleFutures = [best, ...alts]
+          .map((r) => _trefleService.getTags(r.scientificName, r.family))
+          .toList();
+      _location = await locationFuture;
+      final allTags = await Future.wait(trefleFutures);
+      _tags = allTags.first;
+      final all = await _storage.loadPlants();
 
       final match = all.where((p) =>
           p.scientificName.toLowerCase() == best.scientificName.toLowerCase());
@@ -95,7 +106,11 @@ class _IdentifyScreenState extends State<IdentifyScreen> {
 
   /// Swap an alternative in as the active result, re-check for duplicates.
   Future<void> _selectAlternative(PlantIdentificationResult alt) async {
-    final all = await _storage.loadPlants();
+    // Both already cached — fire in parallel, await separately to keep types clean.
+    final allFuture = _storage.loadPlants();
+    final tagsFuture = _trefleService.getTags(alt.scientificName, alt.family);
+    final all = await allFuture;
+    final altTags = await tagsFuture;
     final match = all.where((p) =>
         p.scientificName.toLowerCase() == alt.scientificName.toLowerCase());
     setState(() {
@@ -106,6 +121,7 @@ class _IdentifyScreenState extends State<IdentifyScreen> {
             (a) => a.scientificName != alt.scientificName),
       ];
       _result = alt;
+      _tags = altTags;
       _existingPlant = match.isNotEmpty ? match.first : null;
     });
   }
@@ -140,6 +156,7 @@ class _IdentifyScreenState extends State<IdentifyScreen> {
       confidence: _result!.confidence,
       createdAt: now,
       referenceImageUrls: _result!.imageUrls,
+      tags: _tags,
     );
     final all = await _storage.loadPlants();
     all.add(plant);
@@ -150,9 +167,12 @@ class _IdentifyScreenState extends State<IdentifyScreen> {
   Future<void> _useAsMain() async {
     if (_image == null || _existingPlant == null) return;
     final path = await _storage.copyImageToPermanentStorage(_image!.path);
-    final updated = _existingPlant!.copyWith(
+    var updated = _existingPlant!.copyWith(
       sightings: [_buildSighting(path), ..._existingPlant!.sightings],
     );
+    if (updated.tags.isEmpty && _tags.isNotEmpty) {
+      updated = updated.copyWith(tags: _tags);
+    }
     await _patchPlant(updated);
     _finish(_existingPlant!.commonName);
   }
@@ -160,9 +180,12 @@ class _IdentifyScreenState extends State<IdentifyScreen> {
   Future<void> _addToGallery() async {
     if (_image == null || _existingPlant == null) return;
     final path = await _storage.copyImageToPermanentStorage(_image!.path);
-    final updated = _existingPlant!.copyWith(
+    var updated = _existingPlant!.copyWith(
       sightings: [..._existingPlant!.sightings, _buildSighting(path)],
     );
+    if (updated.tags.isEmpty && _tags.isNotEmpty) {
+      updated = updated.copyWith(tags: _tags);
+    }
     await _patchPlant(updated);
     _finish(_existingPlant!.commonName);
   }
@@ -173,6 +196,7 @@ class _IdentifyScreenState extends State<IdentifyScreen> {
       _result = null;
       _alternatives = [];
       _existingPlant = null;
+      _tags = [];
     });
   }
 
@@ -192,6 +216,7 @@ class _IdentifyScreenState extends State<IdentifyScreen> {
       _result = null;
       _alternatives = [];
       _existingPlant = null;
+      _tags = [];
     });
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -261,7 +286,7 @@ class _IdentifyScreenState extends State<IdentifyScreen> {
           ],
 
           if (_result != null) ...[
-            _ResultCard(result: _result!),
+            _ResultCard(result: _result!, tags: _tags),
             const SizedBox(height: 10),
 
             // ── alternatives ──────────────────────────────────────────────
@@ -340,6 +365,7 @@ class _IdentifyScreenState extends State<IdentifyScreen> {
                 _alternatives = [];
                 _existingPlant = null;
                 _error = null;
+                _tags = [];
               }),
               child: const Text('Start over'),
             ),
@@ -553,8 +579,9 @@ class _DuplicateActions extends StatelessWidget {
 
 class _ResultCard extends StatelessWidget {
   final PlantIdentificationResult result;
+  final List<String> tags;
 
-  const _ResultCard({required this.result});
+  const _ResultCard({required this.result, this.tags = const []});
 
   @override
   Widget build(BuildContext context) {
@@ -579,6 +606,7 @@ class _ResultCard extends StatelessWidget {
                     commonName: result.commonName,
                     scientificName: result.scientificName,
                     family: result.family,
+                    tags: tags,
                   ),
                 ),
               ),
@@ -683,6 +711,16 @@ class _ResultCard extends StatelessWidget {
                     italic: true),
                 const SizedBox(height: 8),
                 _Row(label: 'Family', value: result.family),
+                if (tags.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 5,
+                    children: tags
+                        .map((t) => _IdentifyTagChip(tag: t))
+                        .toList(),
+                  ),
+                ],
               ],
             ),
           ),
@@ -771,6 +809,32 @@ class _ActionButton extends StatelessWidget {
             RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         foregroundColor: Colors.green[700],
         side: BorderSide(color: Colors.green[300]!),
+      ),
+    );
+  }
+}
+
+class _IdentifyTagChip extends StatelessWidget {
+  final String tag;
+  const _IdentifyTagChip({required this.tag});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = tagColor(tag);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
+      ),
+      child: Text(
+        tag,
+        style: TextStyle(
+          fontSize: 11,
+          color: color,
+          fontWeight: FontWeight.w700,
+        ),
       ),
     );
   }

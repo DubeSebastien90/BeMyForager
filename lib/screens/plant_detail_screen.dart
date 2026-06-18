@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../models/plant.dart';
 import '../models/sighting.dart';
 import '../services/storage_service.dart';
+import '../widgets/plant_card.dart' show tagColor;
 import 'plant_reference_screen.dart';
 
 class PlantDetailScreen extends StatefulWidget {
@@ -304,6 +305,16 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> {
                               color: Colors.grey[500],
                             ),
                           ),
+                          if (_plant.tags.isNotEmpty) ...[
+                            const SizedBox(height: 8),
+                            Wrap(
+                              spacing: 5,
+                              runSpacing: 4,
+                              children: _plant.tags
+                                  .map((tag) => _DetailTagChip(tag: tag))
+                                  .toList(),
+                            ),
+                          ],
                         ],
                       ),
                     ),
@@ -318,6 +329,7 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> {
                               commonName: _plant.commonName,
                               scientificName: _plant.scientificName,
                               family: _plant.family,
+                              tags: _plant.tags,
                             ),
                           ),
                         ),
@@ -463,6 +475,32 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _DetailTagChip extends StatelessWidget {
+  final String tag;
+  const _DetailTagChip({required this.tag});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = tagColor(tag);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Text(
+        tag,
+        style: TextStyle(
+          fontSize: 11,
+          color: color,
+          fontWeight: FontWeight.w700,
+        ),
       ),
     );
   }
