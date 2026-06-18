@@ -8,7 +8,7 @@ class PlantIdentificationResult {
   final String commonName;
   final String family;
   final double confidence;
-  final List<String> imageUrls; // up to 3 medium-size reference photos
+  final List<String> imageUrls;
 
   const PlantIdentificationResult({
     required this.scientificName,
@@ -22,26 +22,19 @@ class PlantIdentificationResult {
 }
 
 class PlantNetService {
-  static const String _baseUrl =
-      'https://my-api.plantnet.org/v2/identify/all';
+  static String get _functionUrl =>
+      '${dotenv.env['SUPABASE_URL']}/functions/v1/identify-plant';
 
-  /// Returns all candidates ordered by confidence (best first).
+  static String get _apiKey => dotenv.env['SUPABASE_PUBLISHABLE_KEY'] ?? '';
+
   Future<List<PlantIdentificationResult>> identify(
     File imageFile, {
     String lang = 'en',
   }) async {
-    final apiKey = dotenv.env['PLANTNET_API_KEY'] ?? '';
-    if (apiKey.isEmpty || apiKey == 'your_api_key_here') {
-      throw Exception('PlantNet API key is not configured in .env');
-    }
-
-    final uri = Uri.parse(
-        '$_baseUrl?api-key=$apiKey&lang=$lang&include-related-images=true');
-    final request = http.MultipartRequest('POST', uri);
-    request.files.add(
-      await http.MultipartFile.fromPath('images', imageFile.path),
-    );
-    request.fields['organs'] = 'auto';
+    final uri = Uri.parse('$_functionUrl?lang=$lang');
+    final request = http.MultipartRequest('POST', uri)
+      ..headers['apiKey'] = _apiKey
+      ..files.add(await http.MultipartFile.fromPath('images', imageFile.path));
 
     final streamed = await request.send();
     final response = await http.Response.fromStream(streamed);
@@ -70,7 +63,6 @@ class PlantNetService {
       final commonNames = (species['commonNames'] as List<dynamic>?) ?? [];
       final familyObj = species['family'] as Map<String, dynamic>?;
 
-      // grab up to 3 medium URLs from related images
       final imageUrls = <String>[];
       final images = r['images'] as List<dynamic>?;
       if (images != null) {

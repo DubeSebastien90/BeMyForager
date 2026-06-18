@@ -20,6 +20,7 @@ class PlantDetailScreen extends StatefulWidget {
 class _PlantDetailScreenState extends State<PlantDetailScreen> {
   final _storage = StorageService();
   late Plant _plant;
+  bool _saving = false;
 
   @override
   void initState() {
@@ -46,16 +47,28 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> {
   }
 
   Future<void> _setAsMain(int index) async {
-    final sightings = List<Sighting>.from(_plant.sightings);
-    final chosen = sightings.removeAt(index);
-    sightings.insert(0, chosen);
-    await _persist(sightings);
+    if (_saving) return;
+    setState(() => _saving = true);
+    try {
+      final sightings = List<Sighting>.from(_plant.sightings);
+      final chosen = sightings.removeAt(index);
+      sightings.insert(0, chosen);
+      await _persist(sightings);
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 
   Future<void> _removePhoto(int index) async {
-    await _storage.deleteImageFile(_plant.sightings[index].imagePath);
-    final sightings = List<Sighting>.from(_plant.sightings)..removeAt(index);
-    await _persist(sightings);
+    if (_saving) return;
+    setState(() => _saving = true);
+    try {
+      await _storage.deleteImageFile(_plant.sightings[index].imagePath);
+      final sightings = List<Sighting>.from(_plant.sightings)..removeAt(index);
+      await _persist(sightings);
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 
   Future<void> _deletePlant() async {
@@ -387,7 +400,7 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> {
                 (ctx, i) {
                   final isMain = i == 0;
                   return GestureDetector(
-                    onTap: () => _showOptions(i),
+                    onTap: _saving ? null : () => _showOptions(i),
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(12),
                       child: Stack(

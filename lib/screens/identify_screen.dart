@@ -35,6 +35,7 @@ class _IdentifyScreenState extends State<IdentifyScreen> {
   List<PlantIdentificationResult> _alternatives = [];
   Plant? _existingPlant;
   bool _identifying = false;
+  bool _saving = false;
   String? _error;
   PlantLocation? _location;
   List<String> _tags = [];
@@ -94,17 +95,21 @@ class _IdentifyScreenState extends State<IdentifyScreen> {
       final match = all.where((p) =>
           p.scientificName.toLowerCase() == best.scientificName.toLowerCase());
 
-      setState(() {
-        _result = best;
-        _alternatives = alts;
-        _existingPlant = match.isNotEmpty ? match.first : null;
-        _identifying = false;
-      });
+      if (mounted) {
+        setState(() {
+          _result = best;
+          _alternatives = alts;
+          _existingPlant = match.isNotEmpty ? match.first : null;
+          _identifying = false;
+        });
+      }
     } catch (e) {
-      setState(() {
-        _error = e.toString().replaceFirst('Exception: ', '');
-        _identifying = false;
-      });
+      if (mounted) {
+        setState(() {
+          _error = e.toString().replaceFirst('Exception: ', '');
+          _identifying = false;
+        });
+      }
     }
   }
 
@@ -117,17 +122,19 @@ class _IdentifyScreenState extends State<IdentifyScreen> {
     final altTags = await tagsFuture;
     final match = all.where((p) =>
         p.scientificName.toLowerCase() == alt.scientificName.toLowerCase());
-    setState(() {
-      final prev = _result!;
-      _alternatives = [
-        prev,
-        ..._alternatives.where(
-            (a) => a.scientificName != alt.scientificName),
-      ];
-      _result = alt;
-      _tags = altTags;
-      _existingPlant = match.isNotEmpty ? match.first : null;
-    });
+    if (mounted) {
+      setState(() {
+        final prev = _result!;
+        _alternatives = [
+          prev,
+          ..._alternatives.where(
+              (a) => a.scientificName != alt.scientificName),
+        ];
+        _result = alt;
+        _tags = altTags;
+        _existingPlant = match.isNotEmpty ? match.first : null;
+      });
+    }
   }
 
   // ── save actions ──────────────────────────────────────────────────────────
@@ -146,53 +153,68 @@ class _IdentifyScreenState extends State<IdentifyScreen> {
   );
 
   Future<void> _saveNew() async {
-    if (_image == null || _result == null) return;
-    debugPrint('[SaveNew] location at save time: '
-        'lat=${_location?.latitude} lng=${_location?.longitude} '
-        'locality=${_location?.locality} country=${_location?.country}');
-    final path = await _storage.copyImageToPermanentStorage(_image!.path);
-    final now = DateTime.now();
-    final plant = Plant(
-      id: _uuid.v4(),
-      sightings: [_buildSighting(path)],
-      scientificName: _result!.scientificName,
-      commonName: _result!.commonName,
-      family: _result!.family,
-      confidence: _result!.confidence,
-      createdAt: now,
-      referenceImageUrls: _result!.imageUrls,
-      tags: _tags,
-    );
-    final all = await _storage.loadPlants();
-    all.add(plant);
-    await _storage.savePlants(all);
-    _finish(plant.commonName);
+    if (_saving || _image == null || _result == null) return;
+    setState(() => _saving = true);
+    try {
+      debugPrint('[SaveNew] location at save time: '
+          'lat=${_location?.latitude} lng=${_location?.longitude} '
+          'locality=${_location?.locality} country=${_location?.country}');
+      final path = await _storage.copyImageToPermanentStorage(_image!.path);
+      final now = DateTime.now();
+      final plant = Plant(
+        id: _uuid.v4(),
+        sightings: [_buildSighting(path)],
+        scientificName: _result!.scientificName,
+        commonName: _result!.commonName,
+        family: _result!.family,
+        confidence: _result!.confidence,
+        createdAt: now,
+        referenceImageUrls: _result!.imageUrls,
+        tags: _tags,
+      );
+      final all = await _storage.loadPlants();
+      all.add(plant);
+      await _storage.savePlants(all);
+      _finish(plant.commonName);
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 
   Future<void> _useAsMain() async {
-    if (_image == null || _existingPlant == null) return;
-    final path = await _storage.copyImageToPermanentStorage(_image!.path);
-    var updated = _existingPlant!.copyWith(
-      sightings: [_buildSighting(path), ..._existingPlant!.sightings],
-    );
-    if (updated.tags.isEmpty && _tags.isNotEmpty) {
-      updated = updated.copyWith(tags: _tags);
+    if (_saving || _image == null || _existingPlant == null) return;
+    setState(() => _saving = true);
+    try {
+      final path = await _storage.copyImageToPermanentStorage(_image!.path);
+      var updated = _existingPlant!.copyWith(
+        sightings: [_buildSighting(path), ..._existingPlant!.sightings],
+      );
+      if (updated.tags.isEmpty && _tags.isNotEmpty) {
+        updated = updated.copyWith(tags: _tags);
+      }
+      await _patchPlant(updated);
+      _finish(_existingPlant!.commonName);
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
-    await _patchPlant(updated);
-    _finish(_existingPlant!.commonName);
   }
 
   Future<void> _addToGallery() async {
-    if (_image == null || _existingPlant == null) return;
-    final path = await _storage.copyImageToPermanentStorage(_image!.path);
-    var updated = _existingPlant!.copyWith(
-      sightings: [..._existingPlant!.sightings, _buildSighting(path)],
-    );
-    if (updated.tags.isEmpty && _tags.isNotEmpty) {
-      updated = updated.copyWith(tags: _tags);
+    if (_saving || _image == null || _existingPlant == null) return;
+    setState(() => _saving = true);
+    try {
+      final path = await _storage.copyImageToPermanentStorage(_image!.path);
+      var updated = _existingPlant!.copyWith(
+        sightings: [..._existingPlant!.sightings, _buildSighting(path)],
+      );
+      if (updated.tags.isEmpty && _tags.isNotEmpty) {
+        updated = updated.copyWith(tags: _tags);
+      }
+      await _patchPlant(updated);
+      _finish(_existingPlant!.commonName);
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
-    await _patchPlant(updated);
-    _finish(_existingPlant!.commonName);
   }
 
   void _dropPhoto() {
@@ -316,16 +338,24 @@ class _IdentifyScreenState extends State<IdentifyScreen> {
               ),
               const SizedBox(height: 12),
               _DuplicateActions(
-                onUseAsMain: _useAsMain,
-                onAddToGallery: _addToGallery,
-                onDrop: _dropPhoto,
+                onUseAsMain: _saving ? null : _useAsMain,
+                onAddToGallery: _saving ? null : _addToGallery,
+                onDrop: _saving ? null : _dropPhoto,
+                saving: _saving,
               ),
             ] else ...[
               SizedBox(
                 width: double.infinity,
                 child: FilledButton.icon(
-                  onPressed: _saveNew,
-                  icon: const Icon(Icons.add),
+                  onPressed: _saving ? null : _saveNew,
+                  icon: _saving
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Icon(Icons.add),
                   label: Text('add_to_collection'.tr()),
                   style: FilledButton.styleFrom(
                     backgroundColor: Colors.green[700],
@@ -518,14 +548,16 @@ class _AlternativeTile extends StatelessWidget {
 }
 
 class _DuplicateActions extends StatelessWidget {
-  final VoidCallback onUseAsMain;
-  final VoidCallback onAddToGallery;
-  final VoidCallback onDrop;
+  final VoidCallback? onUseAsMain;
+  final VoidCallback? onAddToGallery;
+  final VoidCallback? onDrop;
+  final bool saving;
 
   const _DuplicateActions({
     required this.onUseAsMain,
     required this.onAddToGallery,
     required this.onDrop,
+    this.saving = false,
   });
 
   @override
@@ -536,7 +568,14 @@ class _DuplicateActions extends StatelessWidget {
           width: double.infinity,
           child: FilledButton.icon(
             onPressed: onUseAsMain,
-            icon: const Icon(Icons.star_outline),
+            icon: saving
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: Colors.white),
+                  )
+                : const Icon(Icons.star_outline),
             label: Text('use_as_main'.tr()),
             style: FilledButton.styleFrom(
               backgroundColor: Colors.green[700],

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "707833375007",
+    "project_id": "bemyforager",
+    "storage_bucket": "bemyforager.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:707833375007:android:511aec14cdda44ddd6e82a",
+        "android_client_info": {
+          "package_name": "com.sebastiendube.bemyforager"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCJAQSGFffXO-nb-t_OeeWyQ_KNh3sNCYA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

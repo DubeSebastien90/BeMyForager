@@ -1,0 +1,2 @@
+https://github.com/firebase/firebase-ios-sdk
+https://docs.swift.org/swiftpm/documentation/packagemanagerdocs/
