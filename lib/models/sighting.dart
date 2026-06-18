@@ -58,6 +58,18 @@ class Sighting {
     return parts.join(', ');
   }
 
+  Sighting copyWith({String? imagePath}) => Sighting(
+    imagePath: imagePath ?? this.imagePath,
+    capturedAt: capturedAt,
+    latitude: latitude,
+    longitude: longitude,
+    country: country,
+    administrativeArea: administrativeArea,
+    locality: locality,
+    subLocality: subLocality,
+    placeName: placeName,
+  );
+
   Map<String, dynamic> toJson() => {
     'imagePath': imagePath,
     'capturedAt': capturedAt.toIso8601String(),
