@@ -60,6 +60,20 @@ class _IdentifyScreenState extends State<IdentifyScreen> {
     await _identify();
   }
 
+  String _friendlyError(String raw) {
+    if (raw.contains('404') ||
+        raw.contains('No plant could be identified') ||
+        raw.contains('no results')) {
+      return 'error_not_recognized'.tr();
+    }
+    if (raw.contains('SocketException') ||
+        raw.contains('network') ||
+        raw.contains('Connection')) {
+      return 'error_network'.tr();
+    }
+    return 'error_generic'.tr();
+  }
+
   Future<void> _identify() async {
     if (_image == null) return;
     setState(() {
@@ -111,7 +125,7 @@ class _IdentifyScreenState extends State<IdentifyScreen> {
       AnalyticsService.recordError(e, stack);
       if (mounted) {
         setState(() {
-          _error = e.toString().replaceFirst('Exception: ', '');
+          _error = _friendlyError(e.toString());
           _identifying = false;
         });
       }

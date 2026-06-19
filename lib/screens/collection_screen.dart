@@ -449,25 +449,30 @@ class _CollectionScreenState extends State<CollectionScreen> {
 
   Widget _emptyState() {
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.eco_outlined, size: 80, color: Colors.green[200]),
-          const SizedBox(height: 16),
-          Text(
-            'no_plants_yet'.tr(),
-            style: TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.w600,
-              color: Colors.grey[600],
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 40),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.eco_outlined, size: 80, color: Colors.green[200]),
+            const SizedBox(height: 16),
+            Text(
+              'no_plants_yet'.tr(),
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey[600],
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'no_plants_hint'.tr(),
-            style: TextStyle(color: Colors.grey[400]),
-          ),
-        ],
+            const SizedBox(height: 8),
+            Text(
+              'no_plants_hint'.tr(),
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.grey[400]),
+            ),
+          ],
+        ),
       ),
     );
   }
