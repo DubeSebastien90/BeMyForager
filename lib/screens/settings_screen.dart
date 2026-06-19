@@ -1,5 +1,6 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
+import '../services/analytics_service.dart';
 import '../services/demo_data_service.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -35,6 +36,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() => _demoLoading = true);
     try {
       await DemoDataService().populate();
+      AnalyticsService.logDemoLoaded();
     } finally {
       if (mounted) {
         // Pop with true so HomeScreen knows to refresh the collection.
@@ -60,12 +62,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _LanguageTile(
             label: 'english'.tr(),
             selected: currentLang == 'en',
-            onTap: () => context.setLocale(const Locale('en')),
+            onTap: () {
+              context.setLocale(const Locale('en'));
+              AnalyticsService.logLanguageChanged('en');
+            },
           ),
           _LanguageTile(
             label: 'french'.tr(),
             selected: currentLang == 'fr',
-            onTap: () => context.setLocale(const Locale('fr')),
+            onTap: () {
+              context.setLocale(const Locale('fr'));
+              AnalyticsService.logLanguageChanged('fr');
+            },
           ),
           const Divider(height: 1),
           _SectionHeader(label: 'developer_section'.tr()),

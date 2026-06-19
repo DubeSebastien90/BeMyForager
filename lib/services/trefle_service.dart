@@ -1,13 +1,11 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
+import '../config.dart';
 
 class TrefleService {
-  static String get _functionUrl =>
-      '${dotenv.env['SUPABASE_URL']}/functions/v1/identify-plant';
-
-  static String get _apiKey => dotenv.env['SUPABASE_PUBLISHABLE_KEY'] ?? '';
+  static const _functionUrl = Config.functionUrl;
+  static const _apiKey = Config.supabasePublishableKey;
 
   static const _fungalFamilies = {
     'Agaricaceae', 'Amanitaceae', 'Boletaceae', 'Cantharellaceae',

@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
+import '../config.dart';
 
 class PlantIdentificationResult {
   final String scientificName;
@@ -22,10 +22,8 @@ class PlantIdentificationResult {
 }
 
 class PlantNetService {
-  static String get _functionUrl =>
-      '${dotenv.env['SUPABASE_URL']}/functions/v1/identify-plant';
-
-  static String get _apiKey => dotenv.env['SUPABASE_PUBLISHABLE_KEY'] ?? '';
+  static const _functionUrl = Config.functionUrl;
+  static const _apiKey = Config.supabasePublishableKey;
 
   Future<List<PlantIdentificationResult>> identify(
     File imageFile, {

@@ -11,6 +11,7 @@ import '../services/location_service.dart';
 import '../services/plant_net_service.dart';
 import '../services/storage_service.dart';
 import '../services/trefle_service.dart';
+import '../services/analytics_service.dart';
 import '../widgets/plant_card.dart' show tagColor, localizedTag;
 
 class IdentifyScreen extends StatefulWidget {
@@ -68,10 +69,8 @@ class _IdentifyScreenState extends State<IdentifyScreen> {
     try {
       // location runs in parallel with PlantNet; Trefle starts after we have the scientific name
       final locationFuture = _locationService.getCurrentLocation();
-      final results = await _service.identify(
-        _image!,
-        lang: context.locale.languageCode,
-      );
+      final lang = context.locale.languageCode;
+      final results = await _service.identify(_image!, lang: lang);
       final best = results.first;
       final topScore = best.confidence;
 
@@ -102,8 +101,14 @@ class _IdentifyScreenState extends State<IdentifyScreen> {
           _existingPlant = match.isNotEmpty ? match.first : null;
           _identifying = false;
         });
+        AnalyticsService.logPlantIdentified(
+          scientificName: best.scientificName,
+          confidence: best.confidence,
+          lang: lang,
+        );
       }
-    } catch (e) {
+    } catch (e, stack) {
+      AnalyticsService.recordError(e, stack);
       if (mounted) {
         setState(() {
           _error = e.toString().replaceFirst('Exception: ', '');
@@ -175,6 +180,8 @@ class _IdentifyScreenState extends State<IdentifyScreen> {
       final all = await _storage.loadPlants();
       all.add(plant);
       await _storage.savePlants(all);
+      AnalyticsService.logPlantSaved(
+          scientificName: plant.scientificName, action: 'new');
       _finish(plant.commonName);
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -193,6 +200,8 @@ class _IdentifyScreenState extends State<IdentifyScreen> {
         updated = updated.copyWith(tags: _tags);
       }
       await _patchPlant(updated);
+      AnalyticsService.logPlantSaved(
+          scientificName: _result!.scientificName, action: 'use_as_main');
       _finish(_existingPlant!.commonName);
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -211,6 +220,8 @@ class _IdentifyScreenState extends State<IdentifyScreen> {
         updated = updated.copyWith(tags: _tags);
       }
       await _patchPlant(updated);
+      AnalyticsService.logPlantSaved(
+          scientificName: _result!.scientificName, action: 'add_to_gallery');
       _finish(_existingPlant!.commonName);
     } finally {
       if (mounted) setState(() => _saving = false);

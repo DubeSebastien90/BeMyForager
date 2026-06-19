@@ -1,6 +1,11 @@
 # Environment variables
 .env
 
+# Firebase config (contains project IDs — do not commit to public repos)
+android/app/google-services.json
+ios/Runner/GoogleService-Info.plist
+analytics/
+
 # Miscellaneous
 *.class
 *.log
