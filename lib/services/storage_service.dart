@@ -2,24 +2,36 @@ import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/plant.dart';
+import 'analytics_service.dart';
 
 class StorageService {
   static const String _plantsKey = 'plants';
 
   Future<List<Plant>> loadPlants() async {
-    final prefs = await SharedPreferences.getInstance();
-    final json = prefs.getString(_plantsKey);
-    if (json == null || json.isEmpty) return [];
-    final appDir = await getApplicationDocumentsDirectory();
-    final plants = Plant.listFromJson(json);
-    return plants.map((p) => _withAbsolutePaths(p, appDir.path)).toList();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final json = prefs.getString(_plantsKey);
+      if (json == null || json.isEmpty) return [];
+      final appDir = await getApplicationDocumentsDirectory();
+      final plants = Plant.listFromJson(json);
+      return plants.map((p) => _withAbsolutePaths(p, appDir.path)).toList();
+    } catch (e, stack) {
+      AnalyticsService.recordError(e, stack);
+      return [];
+    }
   }
 
   Future<void> savePlants(List<Plant> plants) async {
-    final prefs = await SharedPreferences.getInstance();
-    final appDir = await getApplicationDocumentsDirectory();
-    final toSave = plants.map((p) => _withRelativePaths(p, appDir.path)).toList();
-    await prefs.setString(_plantsKey, Plant.listToJson(toSave));
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final appDir = await getApplicationDocumentsDirectory();
+      final toSave =
+          plants.map((p) => _withRelativePaths(p, appDir.path)).toList();
+      await prefs.setString(_plantsKey, Plant.listToJson(toSave));
+    } catch (e, stack) {
+      AnalyticsService.recordError(e, stack);
+      rethrow;
+    }
   }
 
   Future<String> copyImageToPermanentStorage(String tempPath) async {
