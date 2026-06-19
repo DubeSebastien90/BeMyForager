@@ -8,6 +8,8 @@
 	<string>BeMyForager needs camera access to photograph plants for identification.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>BeMyForager needs photo library access to select plant photos for identification.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>BeMyForager can save your plant photos to your photo library.</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>

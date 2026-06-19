@@ -1,0 +1,916 @@
+import 'dart:io';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:easy_localization/easy_localization.dart';
+import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'plant_reference_screen.dart';
+import 'package:uuid/uuid.dart';
+import '../models/plant.dart';
+import '../models/sighting.dart';
+import '../services/analytics_service.dart';
+import '../services/location_service.dart';
+import '../services/plant_net_service.dart';
+import '../services/storage_service.dart';
+import '../services/trefle_service.dart';
+import 'package:gal/gal.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../widgets/plant_card.dart' show tagColor, localizedTag;
+
+class PlantResultScreen extends StatefulWidget {
+  final File imageFile;
+
+  const PlantResultScreen({super.key, required this.imageFile});
+
+  @override
+  State<PlantResultScreen> createState() => _PlantResultScreenState();
+}
+
+class _PlantResultScreenState extends State<PlantResultScreen> {
+  final _picker = ImagePicker();
+  final _service = PlantNetService();
+  final _storage = StorageService();
+  final _locationService = LocationService();
+  final _trefleService = TrefleService();
+  static const _uuid = Uuid();
+
+  late File _image;
+  PlantIdentificationResult? _result;
+  List<PlantIdentificationResult> _alternatives = [];
+  Plant? _existingPlant;
+  bool _identifying = false;
+  bool _saving = false;
+  String? _error;
+  PlantLocation? _location;
+  List<String> _tags = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _image = widget.imageFile;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _identify();
+    });
+  }
+
+  Future<void> _pick(ImageSource source) async {
+    final xFile = await _picker.pickImage(
+      source: source,
+      imageQuality: 85,
+      maxWidth: 1200,
+    );
+    if (xFile == null) return;
+    setState(() {
+      _image = File(xFile.path);
+      _result = null;
+      _alternatives = [];
+      _existingPlant = null;
+      _error = null;
+      _location = null;
+      _tags = [];
+    });
+    await _identify();
+  }
+
+  String _friendlyError(String raw) {
+    if (raw.contains('404') ||
+        raw.contains('No plant could be identified') ||
+        raw.contains('no results')) {
+      return 'error_not_recognized'.tr();
+    }
+    if (raw.contains('SocketException') ||
+        raw.contains('network') ||
+        raw.contains('Connection')) {
+      return 'error_network'.tr();
+    }
+    return 'error_generic'.tr();
+  }
+
+  Future<void> _identify() async {
+    setState(() {
+      _identifying = true;
+      _error = null;
+    });
+    try {
+      final locationFuture = _locationService.getCurrentLocation();
+      final lang = context.locale.languageCode;
+      final results = await _service.identify(_image, lang: lang);
+      final best = results.first;
+      final topScore = best.confidence;
+
+      final alts = results
+          .skip(1)
+          .where((r) =>
+              r.confidence >= topScore * 0.25 && r.confidence >= 0.05)
+          .take(3)
+          .toList();
+
+      final trefleFutures = [best, ...alts]
+          .map((r) => _trefleService.getTags(r.scientificName, r.family))
+          .toList();
+      _location = await locationFuture;
+      final allTags = await Future.wait(trefleFutures);
+      _tags = allTags.first;
+      final all = await _storage.loadPlants();
+
+      final match = all.where((p) =>
+          p.scientificName.toLowerCase() == best.scientificName.toLowerCase());
+
+      if (mounted) {
+        setState(() {
+          _result = best;
+          _alternatives = alts;
+          _existingPlant = match.isNotEmpty ? match.first : null;
+          _identifying = false;
+        });
+        AnalyticsService.logPlantIdentified(
+          scientificName: best.scientificName,
+          confidence: best.confidence,
+          lang: lang,
+        );
+      }
+    } catch (e, stack) {
+      AnalyticsService.recordError(e, stack);
+      if (mounted) {
+        setState(() {
+          _error = _friendlyError(e.toString());
+          _identifying = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _selectAlternative(PlantIdentificationResult alt) async {
+    final allFuture = _storage.loadPlants();
+    final tagsFuture = _trefleService.getTags(alt.scientificName, alt.family);
+    final all = await allFuture;
+    final altTags = await tagsFuture;
+    final match = all.where((p) =>
+        p.scientificName.toLowerCase() == alt.scientificName.toLowerCase());
+    if (mounted) {
+      setState(() {
+        final prev = _result!;
+        _alternatives = [
+          prev,
+          ..._alternatives.where(
+              (a) => a.scientificName != alt.scientificName),
+        ];
+        _result = alt;
+        _tags = altTags;
+        _existingPlant = match.isNotEmpty ? match.first : null;
+      });
+    }
+  }
+
+  // ── save actions ──────────────────────────────────────────────────────────
+
+  Sighting _buildSighting(String imagePath) => Sighting(
+        imagePath: imagePath,
+        capturedAt: DateTime.now(),
+        latitude: _location?.latitude,
+        longitude: _location?.longitude,
+        country: _location?.country,
+        administrativeArea: _location?.administrativeArea,
+        locality: _location?.locality,
+        subLocality: _location?.subLocality,
+        placeName: _location?.placeName,
+        confidence: _result?.confidence,
+      );
+
+  Future<void> _saveNew() async {
+    if (_saving || _result == null) return;
+    setState(() => _saving = true);
+    try {
+      debugPrint('[SaveNew] location at save time: '
+          'lat=${_location?.latitude} lng=${_location?.longitude} '
+          'locality=${_location?.locality} country=${_location?.country}');
+      final sourcePath = _image.path;
+      final path = await _storage.copyImageToPermanentStorage(sourcePath);
+      await _maybeSaveToGallery(sourcePath);
+      final now = DateTime.now();
+      final plant = Plant(
+        id: _uuid.v4(),
+        sightings: [_buildSighting(path)],
+        scientificName: _result!.scientificName,
+        commonName: _result!.commonName,
+        family: _result!.family,
+        confidence: _result!.confidence,
+        createdAt: now,
+        referenceImageUrls: _result!.imageUrls,
+        tags: _tags,
+      );
+      final all = await _storage.loadPlants();
+      all.add(plant);
+      await _storage.savePlants(all);
+      AnalyticsService.logPlantSaved(
+          scientificName: plant.scientificName, action: 'new');
+      _finish(plant.commonName);
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _useAsMain() async {
+    if (_saving || _existingPlant == null) return;
+    setState(() => _saving = true);
+    try {
+      final sourcePath = _image.path;
+      final path = await _storage.copyImageToPermanentStorage(sourcePath);
+      await _maybeSaveToGallery(sourcePath);
+      var updated = _existingPlant!.copyWith(
+        sightings: [_buildSighting(path), ..._existingPlant!.sightings],
+      );
+      if (updated.tags.isEmpty && _tags.isNotEmpty) {
+        updated = updated.copyWith(tags: _tags);
+      }
+      await _patchPlant(updated);
+      AnalyticsService.logPlantSaved(
+          scientificName: _result!.scientificName, action: 'use_as_main');
+      _finish(_existingPlant!.commonName);
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _addToGallery() async {
+    if (_saving || _existingPlant == null) return;
+    setState(() => _saving = true);
+    try {
+      final sourcePath = _image.path;
+      final path = await _storage.copyImageToPermanentStorage(sourcePath);
+      await _maybeSaveToGallery(sourcePath);
+      var updated = _existingPlant!.copyWith(
+        sightings: [..._existingPlant!.sightings, _buildSighting(path)],
+      );
+      if (updated.tags.isEmpty && _tags.isNotEmpty) {
+        updated = updated.copyWith(tags: _tags);
+      }
+      await _patchPlant(updated);
+      AnalyticsService.logPlantSaved(
+          scientificName: _result!.scientificName, action: 'add_to_gallery');
+      _finish(_existingPlant!.commonName);
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  void _dropPhoto() {
+    if (mounted) Navigator.pop(context);
+  }
+
+  Future<void> _maybeSaveToGallery(String imagePath) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool('save_to_gallery') != true) return;
+
+    if (!await Gal.hasAccess()) {
+      await prefs.setBool('save_to_gallery', false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('gallery_permission_denied'.tr()),
+            behavior: SnackBarBehavior.floating,
+            action: Platform.isIOS
+                ? SnackBarAction(
+                    label: 'open_settings'.tr(),
+                    onPressed: () => launchUrl(Uri.parse('app-settings:')),
+                  )
+                : null,
+          ),
+        );
+      }
+      return;
+    }
+
+    try {
+      await Gal.putImage(imagePath);
+    } catch (_) {}
+  }
+
+  Future<void> _patchPlant(Plant updated) async {
+    final all = await _storage.loadPlants();
+    final idx = all.indexWhere((p) => p.id == updated.id);
+    if (idx != -1) {
+      all[idx] = updated;
+      await _storage.savePlants(all);
+    }
+  }
+
+  void _finish(String name) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('added_to_collection'.tr(namedArgs: {'name': name})),
+        backgroundColor: Colors.green[700],
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+    Navigator.pop(context, name);
+  }
+
+  // ── build ─────────────────────────────────────────────────────────────────
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('identify_tab'.tr()),
+        backgroundColor: Colors.green[700],
+        foregroundColor: Colors.white,
+        elevation: 0,
+      ),
+      body: Column(
+        children: [
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
+              child: Column(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(16),
+                    child: Image.file(
+                      _image,
+                      height: 260,
+                      width: double.infinity,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+
+                  if (_identifying) ...[
+                    const SizedBox(height: 8),
+                    const CircularProgressIndicator(),
+                    const SizedBox(height: 12),
+                    Text('identifying'.tr(),
+                        style: TextStyle(color: Colors.grey[600])),
+                    const SizedBox(height: 24),
+                  ],
+
+                  if (_error != null) ...[
+                    _StatusBox(
+                      color: Colors.red,
+                      icon: Icons.error_outline,
+                      child: Text(_error!,
+                          style: const TextStyle(color: Colors.red)),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+
+                  if (_result != null) ...[
+                    _ResultCard(result: _result!, tags: _tags),
+                    const SizedBox(height: 10),
+
+                    if (_alternatives.isNotEmpty) ...[
+                      _AlternativesSection(
+                        alternatives: _alternatives,
+                        onSelect: _selectAlternative,
+                      ),
+                      const SizedBox(height: 10),
+                    ],
+
+                    if (_existingPlant != null) ...[
+                      _StatusBox(
+                        color: Colors.orange,
+                        icon: Icons.info_outline,
+                        child: Text(
+                          'already_in_collection'.tr(
+                              namedArgs: {'name': _result!.commonName}),
+                          style: const TextStyle(color: Colors.orange),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                    ],
+                  ],
+                ],
+              ),
+            ),
+          ),
+          _buildBottomBar(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBottomBar() {
+    if (_identifying) return const SizedBox.shrink();
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+        child: _result == null ? _buildPickerBar() : _buildActionBar(),
+      ),
+    );
+  }
+
+  Widget _buildPickerBar() {
+    return Row(
+      children: [
+        Expanded(
+          child: _ActionButton(
+            icon: Icons.camera_alt_outlined,
+            label: 'camera'.tr(),
+            onTap: () => _pick(ImageSource.camera),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: _ActionButton(
+            icon: Icons.photo_library_outlined,
+            label: 'gallery'.tr(),
+            onTap: () => _pick(ImageSource.gallery),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildActionBar() {
+    final isNew = _existingPlant == null;
+    return Row(
+      children: [
+        OutlinedButton.icon(
+          onPressed: _saving ? null : () => _pick(ImageSource.camera),
+          icon: const Icon(Icons.camera_alt_outlined, size: 18),
+          label: Text('try_again'.tr()),
+          style: OutlinedButton.styleFrom(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12)),
+            foregroundColor: Colors.green[700],
+            side: BorderSide(color: Colors.green[300]!),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: FilledButton(
+            onPressed:
+                _saving ? null : (isNew ? _saveNew : _showDuplicateOptions),
+            style: FilledButton.styleFrom(
+              backgroundColor: Colors.green[700],
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
+            ),
+            child: _saving
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: Colors.white),
+                  )
+                : Text(isNew
+                    ? 'add_to_collection'.tr()
+                    : 'continue_action'.tr()),
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _showDuplicateOptions() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 8),
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 16),
+            ListTile(
+              leading: Icon(Icons.add_photo_alternate_outlined,
+                  color: Colors.green[700]),
+              title: Text('add_to_gallery'.tr()),
+              onTap: () {
+                Navigator.pop(ctx);
+                _addToGallery();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.star_outline, color: Colors.amber),
+              title: Text('use_as_main'.tr()),
+              onTap: () {
+                Navigator.pop(ctx);
+                _useAsMain();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.close, color: Colors.red),
+              title: Text('drop_photo'.tr(),
+                  style: const TextStyle(color: Colors.red)),
+              onTap: () {
+                Navigator.pop(ctx);
+                _dropPhoto();
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── sub-widgets ───────────────────────────────────────────────────────────────
+
+class _AlternativesSection extends StatelessWidget {
+  final List<PlantIdentificationResult> alternatives;
+  final Future<void> Function(PlantIdentificationResult) onSelect;
+
+  const _AlternativesSection(
+      {required this.alternatives, required this.onSelect});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 2, bottom: 8),
+          child: Text(
+            'could_also_be'.tr(),
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              color: Colors.grey[600],
+              fontSize: 13,
+            ),
+          ),
+        ),
+        ...alternatives.map((alt) => _AlternativeTile(
+              result: alt,
+              onTap: () => onSelect(alt),
+            )),
+      ],
+    );
+  }
+}
+
+const _thumbPlaceholder = SizedBox(
+  width: 48,
+  height: 48,
+  child: ColoredBox(
+    color: Color(0xFFE8F5E9),
+    child: Center(
+      child: Icon(Icons.eco_outlined, size: 20, color: Colors.grey),
+    ),
+  ),
+);
+
+class _AlternativeTile extends StatelessWidget {
+  final PlantIdentificationResult result;
+  final VoidCallback onTap;
+
+  const _AlternativeTile({required this.result, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          padding:
+              const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            border: Border.all(color: Colors.grey[200]!),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Row(
+            children: [
+              GestureDetector(
+                onTap: result.imageUrls.isNotEmpty
+                    ? () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (ctx) => PlantReferenceScreen(
+                              imageUrls: result.imageUrls,
+                              commonName: result.commonName,
+                              scientificName: result.scientificName,
+                              family: result.family,
+                            ),
+                          ),
+                        )
+                    : null,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(6),
+                  child: result.imageUrls.isNotEmpty
+                      ? CachedNetworkImage(
+                          imageUrl: result.imageUrls.first,
+                          width: 48,
+                          height: 48,
+                          fit: BoxFit.cover,
+                          placeholder: (context, url) => _thumbPlaceholder,
+                          errorWidget: (context, url, error) =>
+                              _thumbPlaceholder,
+                        )
+                      : _thumbPlaceholder,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      result.commonName,
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w600, fontSize: 13),
+                    ),
+                    Text(
+                      result.scientificName,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontStyle: FontStyle.italic,
+                        color: Colors.grey[500],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Text(
+                '${(result.confidence * 100).toStringAsFixed(0)}%',
+                style: TextStyle(
+                  color: Colors.grey[600],
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(width: 2),
+              Icon(Icons.chevron_right, size: 16, color: Colors.grey[400]),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ResultCard extends StatelessWidget {
+  final PlantIdentificationResult result;
+  final List<String> tags;
+
+  const _ResultCard({required this.result, this.tags = const []});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.green[50],
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.green[200]!),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (result.imageUrls.isNotEmpty)
+            GestureDetector(
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (ctx) => PlantReferenceScreen(
+                    imageUrls: result.imageUrls,
+                    commonName: result.commonName,
+                    scientificName: result.scientificName,
+                    family: result.family,
+                    tags: tags,
+                  ),
+                ),
+              ),
+              child: SizedBox(
+                height: 160,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    CachedNetworkImage(
+                      imageUrl: result.imageUrls.first,
+                      fit: BoxFit.cover,
+                      color: Colors.black38,
+                      colorBlendMode: BlendMode.darken,
+                      placeholder: (context, url) => ColoredBox(
+                        color: Colors.green[100]!,
+                        child: const Center(
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      ),
+                      errorWidget: (context, url, error) => ColoredBox(
+                        color: Colors.green[100]!,
+                        child: Center(
+                          child: Icon(Icons.image_not_supported_outlined,
+                              color: Colors.grey[400], size: 36),
+                        ),
+                      ),
+                    ),
+                    CachedNetworkImage(
+                      imageUrl: result.imageUrls.first,
+                      fit: BoxFit.contain,
+                    ),
+                    Positioned(
+                      bottom: 8,
+                      right: 8,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.black54,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text('tap_to_expand'.tr(),
+                                style: const TextStyle(
+                                    color: Colors.white, fontSize: 10)),
+                            const SizedBox(width: 4),
+                            const Icon(Icons.open_in_full,
+                                color: Colors.white, size: 11),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.eco, color: Colors.green),
+                    const SizedBox(width: 8),
+                    Text(
+                      'plant_identified'.tr(),
+                      style: const TextStyle(
+                          fontWeight: FontWeight.bold, fontSize: 15),
+                    ),
+                    const Spacer(),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.green[700],
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        '${(result.confidence * 100).toStringAsFixed(1)}%',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const Divider(height: 20),
+                _Row(label: 'common_name'.tr(), value: result.commonName),
+                const SizedBox(height: 8),
+                _Row(
+                    label: 'scientific_name'.tr(),
+                    value: result.scientificName,
+                    italic: true),
+                const SizedBox(height: 8),
+                _Row(label: 'family'.tr(), value: result.family),
+                if (tags.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 5,
+                    children: tags
+                        .map((t) => _IdentifyTagChip(tag: t))
+                        .toList(),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Row extends StatelessWidget {
+  final String label;
+  final String value;
+  final bool italic;
+
+  const _Row({required this.label, required this.value, this.italic = false});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 115,
+          child: Text(label,
+              style: TextStyle(color: Colors.grey[600], fontSize: 13)),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              fontStyle: italic ? FontStyle.italic : FontStyle.normal,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _StatusBox extends StatelessWidget {
+  final Color color;
+  final IconData icon;
+  final Widget child;
+
+  const _StatusBox(
+      {required this.color, required this.icon, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: color),
+          const SizedBox(width: 12),
+          Expanded(child: child),
+        ],
+      ),
+    );
+  }
+}
+
+class _ActionButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback? onTap;
+
+  const _ActionButton(
+      {required this.icon, required this.label, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return OutlinedButton.icon(
+      onPressed: onTap,
+      icon: Icon(icon),
+      label: Text(label, textAlign: TextAlign.center),
+      style: OutlinedButton.styleFrom(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        foregroundColor: Colors.green[700],
+        side: BorderSide(color: Colors.green[300]!),
+      ),
+    );
+  }
+}
+
+class _IdentifyTagChip extends StatelessWidget {
+  final String tag;
+  const _IdentifyTagChip({required this.tag});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = tagColor(tag);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
+      ),
+      child: Text(
+        localizedTag(tag),
+        style: TextStyle(
+          fontSize: 11,
+          color: color,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+}

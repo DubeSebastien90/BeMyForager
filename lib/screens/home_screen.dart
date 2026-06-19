@@ -28,10 +28,7 @@ class _HomeScreenState extends State<HomeScreen> {
       MaterialPageRoute(builder: (_) => const SettingsScreen()),
     );
     if (demoLoaded == true) {
-      setState(() {
-        _index = 0;
-        _collectionKey++;
-      });
+      setState(() => _collectionKey++);
     }
   }
 

@@ -1,5 +1,8 @@
+import 'dart:io';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
+import 'package:gal/gal.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../services/analytics_service.dart';
 import '../services/demo_data_service.dart';
@@ -13,6 +16,56 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _demoLoading = false;
+  bool _saveToGallery = false;
+
+  static const _prefKey = 'save_to_gallery';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPrefs();
+  }
+
+  Future<void> _loadPrefs() async {
+    final prefs = await SharedPreferences.getInstance();
+    var enabled = prefs.getBool(_prefKey) ?? false;
+    // If the toggle was on but permission was revoked, sync it back to off.
+    if (enabled && !await Gal.hasAccess()) {
+      enabled = false;
+      await prefs.setBool(_prefKey, false);
+    }
+    if (mounted) setState(() => _saveToGallery = enabled);
+  }
+
+  Future<void> _setSaveToGallery(bool value) async {
+    if (value) {
+      final granted = await Gal.requestAccess();
+      if (!granted) {
+        _showPermissionDeniedSnackbar();
+        return;
+      }
+    }
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_prefKey, value);
+    if (mounted) setState(() => _saveToGallery = value);
+  }
+
+  void _showPermissionDeniedSnackbar() {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('gallery_permission_denied'.tr()),
+        behavior: SnackBarBehavior.floating,
+        action: Platform.isIOS
+            ? SnackBarAction(
+                label: 'open_settings'.tr(),
+                onPressed: () =>
+                    launchUrl(Uri.parse('app-settings:')),
+              )
+            : null,
+      ),
+    );
+  }
 
   Future<void> _loadDemo() async {
     final confirm = await showDialog<bool>(
@@ -75,6 +128,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
               context.setLocale(const Locale('fr'));
               AnalyticsService.logLanguageChanged('fr');
             },
+          ),
+          const Divider(height: 1),
+          _SectionHeader(label: 'photos_section'.tr()),
+          SwitchListTile(
+            secondary: Icon(Icons.photo_library_outlined, color: Colors.green[700]),
+            title: Text('save_to_gallery'.tr()),
+            subtitle: Text('save_to_gallery_subtitle'.tr()),
+            value: _saveToGallery,
+            activeThumbColor: Colors.green[700],
+            onChanged: _setSaveToGallery,
           ),
           const Divider(height: 1),
           _SectionHeader(label: 'legal_section'.tr()),
