@@ -1,5 +1,6 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../services/analytics_service.dart';
 import '../services/demo_data_service.dart';
 
@@ -74,6 +75,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
               context.setLocale(const Locale('fr'));
               AnalyticsService.logLanguageChanged('fr');
             },
+          ),
+          const Divider(height: 1),
+          _SectionHeader(label: 'legal_section'.tr()),
+          ListTile(
+            leading: Icon(Icons.privacy_tip_outlined, color: Colors.green[700]),
+            title: Text('privacy_policy'.tr()),
+            trailing: Icon(Icons.open_in_new, size: 18, color: Colors.grey[400]),
+            onTap: () => launchUrl(
+              Uri.parse('https://delicate-october-831.notion.site/privacy_policy-384802803a788016a864ec901fd1228e'),
+              mode: LaunchMode.externalApplication,
+            ),
           ),
           const Divider(height: 1),
           _SectionHeader(label: 'developer_section'.tr()),
