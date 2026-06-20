@@ -1,6 +1,9 @@
 # Environment variables
 .env
 
+# Android signing — contains keystore path and passwords
+android/key.properties
+
 # Firebase config (contains project IDs — do not commit to public repos)
 android/app/google-services.json
 ios/Runner/GoogleService-Info.plist
