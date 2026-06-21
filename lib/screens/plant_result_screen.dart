@@ -458,9 +458,23 @@ class _PlantResultScreenState extends State<PlantResultScreen> {
                     child: CircularProgressIndicator(
                         strokeWidth: 2, color: Colors.white),
                   )
-                : Text(isNew
-                    ? 'add_to_collection'.tr()
-                    : 'continue_action'.tr()),
+                : Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      if (isNew) ...[
+                        const Icon(Icons.add, size: 22),
+                        const SizedBox(width: 6),
+                      ],
+                      Flexible(
+                        child: Text(
+                          isNew
+                              ? 'add_to_collection'.tr()
+                              : 'continue_action'.tr(),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ],
+                  ),
           ),
         ),
       ],
