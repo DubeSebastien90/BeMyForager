@@ -1,0 +1,34 @@
+# Keeps the Supabase Free-tier project awake.
+# Free projects are paused after 7 days without activity; pinging every
+# 3 days keeps it active even when nobody uses the app.
+name: Supabase keep-alive
+
+on:
+  schedule:
+    - cron: "0 12 */3 * *" # every 3 days at 12:00 UTC
+  workflow_dispatch: # allows a manual run from the Actions tab
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_URL: https://wgexqcwvziiicfludvyx.supabase.co
+      # Publishable key: already public in lib/config.dart
+      SUPABASE_KEY: sb_publishable_o2PRcoTEQnhlHD6zLQdWiA_TVyR-7LO
+    steps:
+      - name: Ping Supabase
+        run: |
+          fail=0
+          for path in /rest/v1/ /auth/v1/health; do
+            code=$(curl -s -o /dev/null -m 30 -w "%{http_code}" \
+              -H "apikey: $SUPABASE_KEY" "$SUPABASE_URL$path")
+            echo "$path -> HTTP $code"
+            # 000 = unreachable (project paused/deleted), 5xx = server down
+            if [ "$code" = "000" ] || [ "$code" -ge 500 ]; then
+              fail=1
+            fi
+          done
+          if [ "$fail" = "1" ]; then
+            echo "::error::Supabase project unreachable - check the dashboard (it may be paused)."
+            exit 1
+          fi
